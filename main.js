@@ -15,9 +15,9 @@ class MainScene extends Phaser.Scene {
     }
 
     this.load.image('forest-bg', 'img/forest.png');
+    this.load.image('platforma-src', 'img/platforma.png');
 
-    // Procedural textures used by UI and platforms
-    this.makeRect('platform', 260, 26, 0x6d6d6d);
+    // Procedural textures used by UI (platforms will use sprite image)
     this.makeArrowButton('arrow-up', 'up');
     this.makeArrowButton('arrow-down', 'down');
     this.makeArrowButton('arrow-left', 'left');
@@ -34,10 +34,13 @@ class MainScene extends Phaser.Scene {
 
     this.createParallaxBackground(W, H);
 
-    // Level layout created from procedural platforms
+    // Prepare platform textures from the provided image with two platforms
+    this.preparePlatformTextures();
+
+    // Level layout using provided platform sprites
     this.platforms = this.physics.add.staticGroup();
-    const leftPlatform = this.addPlatform(80, 520);
-    this.addPlatform(420, 520);
+    const leftPlatform = this.addPlatform(80, 520, 'platform-1');
+    this.addPlatform(420, 520, 'platform-2');
 
     // Player
     const spawnX = leftPlatform.x + leftPlatform.displayWidth * 0.4;
@@ -100,10 +103,29 @@ class MainScene extends Phaser.Scene {
     this.player.play('idle');
   }
 
-  addPlatform(x, y){
-    const pl = this.platforms.create(x, y, 'platform').setOrigin(0,1);
+  addPlatform(x, y, key='platform-1'){
+    const pl = this.platforms.create(x, y, key).setOrigin(0,1);
     pl.refreshBody();
     return pl;
+  }
+
+  preparePlatformTextures(){
+    const base = this.textures.get('platforma-src');
+    if(!base) return;
+    const img = base.getSourceImage();
+    if(!img || !img.width || !img.height) return;
+    const halfW = Math.floor(img.width / 2);
+    const h = img.height;
+    this.createTextureFromSection('platform-1', img, 0, 0, halfW, h);
+    this.createTextureFromSection('platform-2', img, halfW, 0, img.width - halfW, h);
+  }
+
+  createTextureFromSection(key, img, sx, sy, sw, sh){
+    const tex = this.textures.createCanvas(key, sw, sh);
+    const ctx = tex.context;
+    ctx.clearRect(0, 0, sw, sh);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    tex.refresh();
   }
 
   makeRect(key, w, h, color){
