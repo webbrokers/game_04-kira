@@ -14,11 +14,16 @@ class MainScene extends Phaser.Scene {
       this.load.image(key, `run_11/run_${id}.png`);
     }
 
+    this.load.image('forest-bg', 'img/forest.png');
+
     // Procedural textures used by UI and platforms
     this.makeRect('platform', 260, 26, 0x6d6d6d);
-    this.makeCircle('btn', 72, 0xffffff, 0.18); // translucent
-    this.makeCircle('stick-base', 120, 0xffffff, 0.12);
-    this.makeCircle('stick-top', 56, 0xffffff, 0.25);
+    this.makeArrowButton('arrow-up', 'up');
+    this.makeArrowButton('arrow-down', 'down');
+    this.makeArrowButton('arrow-left', 'left');
+    this.makeArrowButton('arrow-right', 'right');
+    this.makeFullscreenIcon('fs-enter');
+    this.makeFullscreenIcon('fs-exit', true);
   }
 
   create(){
@@ -27,10 +32,12 @@ class MainScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, W, H);
 
-    // Level layout: две платформы с разрывом
+    this.createParallaxBackground(W, H);
+
+    // Level layout created from procedural platforms
     this.platforms = this.physics.add.staticGroup();
     const leftPlatform = this.addPlatform(80, 520);
-    const rightPlatform = this.addPlatform(420, 520);
+    this.addPlatform(420, 520);
 
     // Player
     const spawnX = leftPlatform.x + leftPlatform.displayWidth * 0.4;
@@ -42,6 +49,8 @@ class MainScene extends Phaser.Scene {
     this.player.body.setSize(60, 110).setOffset(20, 10);
     this.player.setDragX(1200);
     this.player.setMaxVelocity(360, 900);
+    this.defaultBodySize = { width: 60, height: 110, offsetX: 20, offsetY: 10 };
+    this.isCrouching = false;
 
     this.physics.add.collider(this.player, this.platforms);
 
@@ -54,12 +63,14 @@ class MainScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('A,D,SPACE');
 
-    // Touch controls
-    this.mobile = this.isTouch();
+    // Touch/UI controls
+    this.touchButtons = { left:false, right:false, crouch:false };
     this.createTouchControls();
 
     // Resize game to parent size while maintaining aspect ratio
     this.scale.on('resize', this.resize, this);
+    this.scale.on('enterfullscreen', this.updateFullscreenIcon, this);
+    this.scale.on('leavefullscreen', this.updateFullscreenIcon, this);
     this.resize(this.scale.gameSize);
 
     // Up swipe detection
@@ -101,115 +112,300 @@ class MainScene extends Phaser.Scene {
     g.generateTexture(key, w, h);
     g.destroy();
   }
-  makeCircle(key, d, color, alpha=1){
+
+  makeArrowButton(key, direction, size=128){
     const g = this.make.graphics({x:0,y:0, add:false});
-    g.fillStyle(color, alpha).fillCircle(d/2, d/2, d/2);
-    g.generateTexture(key, d, d);
+    const radius = Math.round(size * 0.22);
+    g.fillStyle(0x000000, 0.32);
+    g.fillRoundedRect(0,0,size,size,radius);
+    g.fillStyle(0xffffff, 0.92);
+    const pad = size * 0.28;
+    const mid = size / 2;
+    g.beginPath();
+    switch(direction){
+      case 'up':
+        g.moveTo(mid, pad);
+        g.lineTo(size - pad, size - pad);
+        g.lineTo(pad, size - pad);
+        break;
+      case 'down':
+        g.moveTo(pad, pad);
+        g.lineTo(size - pad, pad);
+        g.lineTo(mid, size - pad);
+        break;
+      case 'left':
+        g.moveTo(pad, mid);
+        g.lineTo(size - pad, pad);
+        g.lineTo(size - pad, size - pad);
+        break;
+      case 'right':
+      default:
+        g.moveTo(pad, pad);
+        g.lineTo(size - pad, mid);
+        g.lineTo(pad, size - pad);
+        break;
+    }
+    g.closePath();
+    g.fillPath();
+    g.generateTexture(key, size, size);
+    g.destroy();
+  }
+
+  makeFullscreenIcon(key, exit=false, size=120){
+    const g = this.make.graphics({x:0,y:0, add:false});
+    const radius = Math.round(size * 0.22);
+    g.fillStyle(0x000000, 0.32);
+    g.fillRoundedRect(0,0,size,size,radius);
+    g.lineStyle(size * 0.08, 0xffffff, 0.92);
+    const arm = size * 0.18;
+    const pad = size * 0.26;
+    const end = size - pad;
+    const mid = size / 2;
+    g.beginPath();
+    if(exit){
+      // inward corners
+      g.moveTo(pad, pad + arm);
+      g.lineTo(pad, pad);
+      g.lineTo(pad + arm, pad);
+      g.moveTo(end, pad);
+      g.lineTo(end, pad + arm);
+      g.lineTo(end - arm, pad);
+      g.moveTo(pad, end);
+      g.lineTo(pad + arm, end);
+      g.lineTo(pad, end - arm);
+      g.moveTo(end, end);
+      g.lineTo(end - arm, end);
+      g.lineTo(end, end - arm);
+    }else{
+      // outward corners
+      g.moveTo(pad, mid - arm * 0.1);
+      g.lineTo(pad, pad);
+      g.lineTo(mid - arm * 0.1, pad);
+      g.moveTo(end, pad);
+      g.lineTo(end, mid - arm * 0.1);
+      g.lineTo(mid + arm * 0.1, pad);
+      g.moveTo(pad, end);
+      g.lineTo(mid - arm * 0.1, end);
+      g.lineTo(pad, mid + arm * 0.1);
+      g.moveTo(end, end);
+      g.lineTo(end, mid + arm * 0.1);
+      g.lineTo(mid + arm * 0.1, end);
+    }
+    g.strokePath();
+    g.generateTexture(key, size, size);
     g.destroy();
   }
 
   isTouch(){ return this.sys.game.device.input.touch; }
 
   createTouchControls(){
-    // Virtual joystick (left side)
-    this.stick = { base:null, top:null, active:false, id:null, x:100, y:this.scale.height-100, dx:0, dy:0 };
-    this.stick.base = this.add.image(100, this.scale.height-100, 'stick-base').setScrollFactor(0).setDepth(10).setInteractive();
-    this.stick.top  = this.add.image(100, this.scale.height-100, 'stick-top').setScrollFactor(0).setDepth(11).setInteractive();
+    this.btnJump = this.makeButtonImage('arrow-up');
+    this.btnCrouch = this.makeButtonImage('arrow-down');
+    this.btnLeft = this.makeButtonImage('arrow-left');
+    this.btnRight = this.makeButtonImage('arrow-right');
+    this.btnFullscreen = this.makeButtonImage('fs-enter', 0.62);
 
-    // Jump button (right)
-    this.btnJump = this.add.image(this.scale.width-84, this.scale.height-84, 'btn').setScrollFactor(0).setDepth(10).setInteractive();
-    this.btnJump.on('pointerdown', (p)=>{ this.input.manager.setPollAlways(); this.wantJump = true; p.event.preventDefault(); });
-    this.btnJump.on('pointerup',   (p)=>{ p.event.preventDefault(); });
-
-    // Stick pointer events
-    this.input.on('pointerdown', (p)=>{
-      // left half activates stick if near base
-      if(p.x < this.scale.width*0.55 && !this.stick.active){
-        this.stick.active = true; this.stick.id = p.id;
-        this.stick.x = p.x; this.stick.y = p.y;
-        this.stick.base.setPosition(p.x, p.y).setVisible(true);
-        this.stick.top.setPosition(p.x, p.y).setVisible(true);
-      }
+    this.bindTapButton(this.btnJump, ()=>{
+      this.wantJump = true;
     });
-    this.input.on('pointermove', (p)=>{
-      if(this.stick.active && p.id === this.stick.id){
-        const dx = p.x - this.stick.x;
-        const dy = p.y - this.stick.y;
-        const maxR = 60;
-        const len = Math.min(Math.hypot(dx,dy), maxR);
-        const ang = Math.atan2(dy, dx);
-        const nx = Math.cos(ang) * len;
-        const ny = Math.sin(ang) * len;
-        this.stick.top.setPosition(this.stick.x + nx, this.stick.y + ny);
-        this.stick.dx = nx / maxR;
-        this.stick.dy = ny / maxR;
-        if(p.event && p.event.cancelable) p.event.preventDefault();
-      }
-    }, this);
-    const endStick = (p)=>{
-      if(this.stick.active && (!p || p.id === this.stick.id)){
-        this.stick.active = false; this.stick.id = null;
-        this.stick.dx = 0; this.stick.dy = 0;
-        this.stick.base.setPosition(100, this.scale.height-100);
-        this.stick.top.setPosition(100, this.scale.height-100);
-      }
-    };
-    this.input.on('pointerup', endStick);
-    this.input.on('pointercancel', endStick);
+    this.bindHoldButton(this.btnCrouch, 'crouch');
+    this.bindHoldButton(this.btnLeft, 'left');
+    this.bindHoldButton(this.btnRight, 'right');
+    this.setupFullscreenButton();
 
-    // Position UI on resize
-    this.events.on('resize-ui', ()=>{
-      this.stick.base.setPosition(100, this.scale.height-100);
-      this.stick.top.setPosition(100, this.scale.height-100);
-      this.btnJump.setPosition(this.scale.width-84, this.scale.height-84);
-    });
+    this.positionTouchUI();
+    this.events.on('resize-ui', this.positionTouchUI, this);
   }
 
-  resize(gameSize){
+  makeButtonImage(key, scale=0.74){
+    return this.add.image(0, 0, key)
+      .setScrollFactor(0)
+      .setDepth(20)
+      .setAlpha(0.95)
+      .setScale(scale);
+  }
+
+  bindHoldButton(button, key){
+    button.setInteractive({ useHandCursor: false });
+    const down = (pointer)=>{
+      button.setData('pointerId', pointer.id);
+      button.setTint(0x66c1ff);
+      this.touchButtons[key] = true;
+      if(this.input?.manager?.setPollAlways) this.input.manager.setPollAlways();
+      if(pointer.event && pointer.event.cancelable) pointer.event.preventDefault();
+    };
+    const clear = (pointer)=>{
+      if(pointer && button.getData('pointerId') !== pointer.id) return;
+      button.clearTint();
+      button.setData('pointerId', null);
+      this.touchButtons[key] = false;
+    };
+    button.on('pointerdown', down);
+    button.on('pointerup', clear);
+    button.on('pointerupoutside', clear);
+    button.on('pointerout', clear);
+    button.on('pointercancel', clear);
+    return button;
+  }
+
+  bindTapButton(button, callback){
+    button.setInteractive({ useHandCursor: false });
+    const down = (pointer)=>{
+      button.setData('pointerId', pointer.id);
+      button.setTint(0x66c1ff);
+      if(this.input?.manager?.setPollAlways) this.input.manager.setPollAlways();
+      callback();
+      if(pointer.event && pointer.event.cancelable) pointer.event.preventDefault();
+    };
+    const clear = (pointer)=>{
+      if(pointer && button.getData('pointerId') !== pointer.id) return;
+      button.clearTint();
+      button.setData('pointerId', null);
+    };
+    button.on('pointerdown', down);
+    button.on('pointerup', clear);
+    button.on('pointerupoutside', clear);
+    button.on('pointerout', clear);
+    button.on('pointercancel', clear);
+    return button;
+  }
+
+  setupFullscreenButton(){
+    if(!this.btnFullscreen) return;
+    this.btnFullscreen.removeAllListeners();
+    this.btnFullscreen.setInteractive({ useHandCursor: true });
+    const down = (pointer)=>{
+      this.btnFullscreen.setData('pointerId', pointer.id);
+      this.btnFullscreen.setTint(0x66c1ff);
+      this.toggleFullscreen();
+      if(pointer.event && pointer.event.cancelable) pointer.event.preventDefault();
+    };
+    const clear = (pointer)=>{
+      if(pointer && this.btnFullscreen.getData('pointerId') !== pointer.id) return;
+      this.btnFullscreen.clearTint();
+      this.btnFullscreen.setData('pointerId', null);
+      this.updateFullscreenIcon();
+    };
+    this.btnFullscreen.on('pointerdown', down);
+    this.btnFullscreen.on('pointerup', clear);
+    this.btnFullscreen.on('pointerupoutside', clear);
+    this.btnFullscreen.on('pointerout', clear);
+    this.btnFullscreen.on('pointercancel', clear);
+    this.updateFullscreenIcon();
+  }
+
+  createParallaxBackground(W, H){
+    this.background = this.add.image(W * 0.5, H * 0.5, 'forest-bg')
+      .setDepth(-20)
+      .setScrollFactor(0.3, 0.1);
+    this.adjustBackgroundSize();
+  }
+
+  adjustBackgroundSize(){
+    if(!this.background) return;
+    const cam = this.cameras.main;
+    const width = cam.width;
+    const height = cam.height;
+    this.background.setDisplaySize(width * 1.1, height * 1.1);
+    this.background.setPosition(cam.midPoint.x, cam.midPoint.y);
+  }
+
+  positionTouchUI(){
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const bottomPad = Math.max(68, h * 0.08);
+    const verticalGap = Math.max(120, h * 0.2);
+    const leftX = Math.max(90, w * 0.1);
+    const rightBase = w - Math.max(90, w * 0.1);
+    const scaleFactor = Phaser.Math.Clamp(w / 960, 0.65, 1.05);
+
+    [this.btnJump, this.btnCrouch, this.btnLeft, this.btnRight].forEach((btn)=>{
+      if(btn) btn.setScale(0.74 * scaleFactor);
+    });
+    if(this.btnFullscreen) this.btnFullscreen.setScale(0.62 * Phaser.Math.Clamp(w / 960, 0.7, 1.1));
+
+    if(this.btnJump) this.btnJump.setPosition(leftX, h - bottomPad - verticalGap);
+    if(this.btnCrouch) this.btnCrouch.setPosition(leftX, h - bottomPad);
+    if(this.btnLeft) this.btnLeft.setPosition(rightBase - 130, h - bottomPad);
+    if(this.btnRight) this.btnRight.setPosition(rightBase, h - bottomPad);
+    if(this.btnFullscreen) this.btnFullscreen.setPosition(w - 70, 70);
+  }
+
+  toggleFullscreen(){
+    if(this.scale.isFullscreen){
+      this.scale.stopFullscreen();
+    }else{
+      this.scale.startFullscreen();
+    }
+  }
+
+  updateFullscreenIcon(){
+    if(!this.btnFullscreen) return;
+    const texture = this.scale.isFullscreen ? 'fs-exit' : 'fs-enter';
+    this.btnFullscreen.setTexture(texture);
+  }
+
+  resize(){
     const parent = document.getElementById('game');
     const w = parent.clientWidth || window.innerWidth;
     const h = window.innerHeight;
-    // Keep 16:9
-    const desired = { w: 900, h: 506.25 }; // approx 16:9 minus UI bar
-    const ratio = desired.w / desired.h;
-    let width = w, height = Math.round(w / ratio);
-    if(height > h){ height = h; width = Math.round(h * ratio); }
+    const ratio = 16 / 9;
+    let width = w;
+    let height = Math.round(width / ratio);
+    if(height > h){
+      height = h;
+      width = Math.round(height * ratio);
+    }
     this.scale.resize(width, height);
+    this.adjustBackgroundSize();
     this.events.emit('resize-ui');
   }
 
-  update(time, delta){
-    const onGround = this.player.body.blocked.down;
-    const accel = 900;
-    const maxVX = 360;
+  applyCrouch(active){
+    if(active && !this.isCrouching){
+      this.player.body.setSize(this.defaultBodySize.width, Math.round(this.defaultBodySize.height * 0.65)).setOffset(this.defaultBodySize.offsetX, this.defaultBodySize.offsetY + 38);
+      this.player.setMaxVelocity(240, 900);
+      this.isCrouching = true;
+    }else if(!active && this.isCrouching){
+      this.player.body.setSize(this.defaultBodySize.width, this.defaultBodySize.height).setOffset(this.defaultBodySize.offsetX, this.defaultBodySize.offsetY);
+      this.player.setMaxVelocity(360, 900);
+      this.isCrouching = false;
+    }
+  }
 
-    // Keyboard
+  update(){
+    const onGround = this.player.body.blocked.down;
     let axis = 0;
     if(this.cursors.left.isDown || this.keys.A.isDown) axis -= 1;
     if(this.cursors.right.isDown || this.keys.D.isDown) axis += 1;
 
-    // Joystick (overrides desktop when active)
-    if(this.stick && (this.stick.active || this.mobile)){
-      if(Math.abs(this.stick.dx) > 0.1) axis = this.stick.dx;
+    if(this.touchButtons){
+      if(this.touchButtons.left && !this.touchButtons.right) axis = -1;
+      else if(this.touchButtons.right && !this.touchButtons.left) axis = 1;
+      else if(this.touchButtons.left && this.touchButtons.right) axis = 0;
     }
 
-    // Apply acceleration
+    const wantsCrouch = (this.touchButtons && this.touchButtons.crouch) || this.cursors.down.isDown;
+    this.applyCrouch(wantsCrouch && onGround);
+
+    const accel = this.isCrouching ? 520 : 900;
+    const maxVX = this.isCrouching ? 220 : 360;
+
     this.player.setAccelerationX(axis * accel);
     if(!axis) this.player.setAccelerationX(0);
 
-    // Clamp X velocity
     if(Math.abs(this.player.body.velocity.x) > maxVX){
       this.player.setVelocityX(Phaser.Math.Clamp(this.player.body.velocity.x, -maxVX, maxVX));
     }
 
-    // Jump (keyboard + button + swipe)
     if((Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || this.wantJump) && onGround){
       this.player.setVelocityY(-520);
     }
     this.wantJump = false;
 
-    // Animation control
-    if(Math.abs(axis) > 0.05){
+    if(this.isCrouching){
+      if(this.player.anims.getName() !== 'idle') this.player.play('idle');
+    }else if(Math.abs(axis) > 0.05){
       this.player.setFlipX(axis < 0);
       if(this.player.anims.getName() !== 'run'){
         this.player.play('run', true);
@@ -218,7 +414,6 @@ class MainScene extends Phaser.Scene {
       this.player.play('idle');
     }
 
-    // Simple "fall off world" reset
     if(this.player.y > this.physics.world.bounds.height + 200){
       this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
       this.player.setVelocity(0,0);
@@ -238,13 +433,13 @@ const config = {
     }
   },
   scale: {
-    mode: Phaser.Scale.NONE, // we resize manually to keep AR
+    mode: Phaser.Scale.NONE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: 900,
     height: 540
   },
   input: {
-    activePointers: 3, // allow multiple fingers
+    activePointers: 4,
     touch: {
       capture: true
     }
