@@ -5,10 +5,17 @@ class MainScene extends Phaser.Scene {
   constructor(){ super('main'); }
 
   preload(){
-    // Generate simple textures with Graphics
-    this.makeRect('player', 36, 48, 0x51d1ff);
-    this.makeRect('platform', 160, 18, 0x3a3a3a);
-    this.makeRect('ground', 900, 40, 0x3a3a3a);
+    const frameTotal = 11;
+    this.playerFrames = [];
+    for(let i = 1; i <= frameTotal; i++){
+      const id = i.toString().padStart(2, '0');
+      const key = `run_${id}`;
+      this.playerFrames.push(key);
+      this.load.image(key, `run_11/run_${id}.png`);
+    }
+
+    // Procedural textures used by UI and platforms
+    this.makeRect('platform', 260, 26, 0x6d6d6d);
     this.makeCircle('btn', 72, 0xffffff, 0.18); // translucent
     this.makeCircle('stick-base', 120, 0xffffff, 0.12);
     this.makeCircle('stick-top', 56, 0xffffff, 0.25);
@@ -16,25 +23,23 @@ class MainScene extends Phaser.Scene {
 
   create(){
     const W = 900, H = 540;
-    this.cameras.main.setBackgroundColor('#1a1a1a');
+    this.cameras.main.setBackgroundColor('#2b2b2b');
 
-    // World bounds larger than viewport to demonstrate camera follow
-    this.physics.world.setBounds(0, 0, 2000, 1000);
+    this.physics.world.setBounds(0, 0, W, H);
 
-    // Platforms
+    // Level layout: две платформы с разрывом
     this.platforms = this.physics.add.staticGroup();
-    this.platforms.create(0, 960, 'ground').setOrigin(0,1).refreshBody();
-    this.addPlatform(280, 740);
-    this.addPlatform(520, 670);
-    this.addPlatform(720, 600);
-    this.addPlatform(980, 530);
-    this.addPlatform(1200, 460);
-    this.addPlatform(1460, 420);
+    const leftPlatform = this.addPlatform(80, 520);
+    const rightPlatform = this.addPlatform(420, 520);
 
     // Player
-    this.player = this.physics.add.sprite(120, 0, 'player');
+    const spawnX = leftPlatform.x + leftPlatform.displayWidth * 0.4;
+    const spawnY = leftPlatform.y - leftPlatform.displayHeight - 10;
+    this.spawnPoint = { x: spawnX, y: spawnY };
+    this.player = this.physics.add.sprite(spawnX, spawnY, this.playerFrames[0]);
     this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(36, 48).setOffset(0,0);
+    this.player.setScale(0.2);
+    this.player.body.setSize(60, 110).setOffset(20, 10);
     this.player.setDragX(1200);
     this.player.setMaxVelocity(360, 900);
 
@@ -43,7 +48,7 @@ class MainScene extends Phaser.Scene {
     // Camera
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setLerp(0.15, 0.15);
-    this.cameras.main.setBounds(0, 0, 2000, 1000);
+    this.cameras.main.setBounds(0, 0, W, H);
 
     // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -69,10 +74,24 @@ class MainScene extends Phaser.Scene {
       if(isUp) this.wantJump = true;
       this.swipe.start = null;
     });
+
+    // Animations
+    this.anims.create({
+      key: 'run',
+      frames: this.playerFrames.map((key)=> ({ key })),
+      frameRate: 14,
+      repeat: -1
+    });
+    this.anims.create({
+      key: 'idle',
+      frames: [{ key: this.playerFrames[0] }]
+    });
+    this.player.play('idle');
   }
 
   addPlatform(x, y){
-    const pl = this.platforms.create(x, y, 'platform').setOrigin(0,0).refreshBody();
+    const pl = this.platforms.create(x, y, 'platform').setOrigin(0,1);
+    pl.refreshBody();
     return pl;
   }
 
@@ -189,9 +208,19 @@ class MainScene extends Phaser.Scene {
     }
     this.wantJump = false;
 
+    // Animation control
+    if(Math.abs(axis) > 0.05){
+      this.player.setFlipX(axis < 0);
+      if(this.player.anims.getName() !== 'run'){
+        this.player.play('run', true);
+      }
+    }else if(this.player.anims.getName() !== 'idle'){
+      this.player.play('idle');
+    }
+
     // Simple "fall off world" reset
-    if(this.player.y > 1100){
-      this.player.setPosition(120, 0);
+    if(this.player.y > this.physics.world.bounds.height + 200){
+      this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
       this.player.setVelocity(0,0);
     }
   }
@@ -200,7 +229,7 @@ class MainScene extends Phaser.Scene {
 const config = {
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#1a1a1a',
+  backgroundColor: '#2b2b2b',
   physics: {
     default: 'arcade',
     arcade: {
