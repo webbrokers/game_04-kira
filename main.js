@@ -39,11 +39,12 @@ class MainScene extends Phaser.Scene {
 
     // Level layout using provided platform sprites
     this.platforms = this.physics.add.staticGroup();
-    const leftPlatform = this.addPlatform(80, 520, 'platform-1');
-    this.addPlatform(420, 520, 'platform-2');
+    const groundY = 520;
+    const leftPlatform = this.addPlatform(320, groundY, 'platform-long');
+    this.addPlatform(610, groundY, 'platform-short');
 
     // Player
-    const spawnX = leftPlatform.x + leftPlatform.displayWidth * 0.4;
+    const spawnX = leftPlatform.x - leftPlatform.displayWidth * 0.25;
     const spawnY = leftPlatform.y - leftPlatform.displayHeight - 10;
     this.spawnPoint = { x: spawnX, y: spawnY };
     this.player = this.physics.add.sprite(spawnX, spawnY, this.playerFrames[0]);
@@ -103,9 +104,17 @@ class MainScene extends Phaser.Scene {
     this.player.play('idle');
   }
 
-  addPlatform(x, y, key='platform-1'){
-    const pl = this.platforms.create(x, y, key).setOrigin(0,1);
+  addPlatform(x, y, key='platform-long'){
+    const pl = this.platforms.create(x, y, key).setOrigin(0.5,1);
     pl.refreshBody();
+    if(pl.body){
+      const body = pl.body;
+      const hitWidth = pl.displayWidth * 0.9;
+      const hitHeight = pl.displayHeight * 0.45;
+      body.setSize(hitWidth, hitHeight);
+      body.setOffset((pl.displayWidth - hitWidth) * 0.5, pl.displayHeight - hitHeight);
+      body.updateFromGameObject();
+    }
     return pl;
   }
 
@@ -114,25 +123,30 @@ class MainScene extends Phaser.Scene {
     if(!base) return;
     const img = base.getSourceImage();
     if(!img || !img.width || !img.height) return;
-    const halfW = Math.floor(img.width / 2);
-    const h = img.height;
-    this.createTextureFromSection('platform-1', img, 0, 0, halfW, h);
-    this.createTextureFromSection('platform-2', img, halfW, 0, img.width - halfW, h);
+
+    const scale = 0.5;
+    const regions = [
+      { key: 'platform-short', x: 454, y: 211, width: 545, height: 217 },
+      { key: 'platform-long', x: 359, y: 616, width: 776, height: 190 }
+    ];
+    regions.forEach((region)=>{
+      this.createTextureFromSection(region.key, img, region, scale);
+    });
   }
 
-  createTextureFromSection(key, img, sx, sy, sw, sh){
-    const tex = this.textures.createCanvas(key, sw, sh);
+  createTextureFromSection(key, img, region, scale=1){
+    if(this.textures.exists(key)){
+      this.textures.remove(key);
+    }
+    const destW = Math.max(1, Math.round(region.width * scale));
+    const destH = Math.max(1, Math.round(region.height * scale));
+    const tex = this.textures.createCanvas(key, destW, destH);
     const ctx = tex.context;
-    ctx.clearRect(0, 0, sw, sh);
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, destW, destH);
+    ctx.drawImage(img, region.x, region.y, region.width, region.height, 0, 0, destW, destH);
     tex.refresh();
-  }
-
-  makeRect(key, w, h, color){
-    const g = this.make.graphics({x:0,y:0, add:false});
-    g.fillStyle(color, 1).fillRect(0,0,w,h);
-    g.generateTexture(key, w, h);
-    g.destroy();
+    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
 
   makeArrowButton(key, direction, size=128){
