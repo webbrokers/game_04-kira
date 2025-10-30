@@ -109,10 +109,12 @@ class MainScene extends Phaser.Scene {
     pl.refreshBody();
     if(pl.body){
       const body = pl.body;
-      const hitWidth = pl.displayWidth * 0.9;
-      const hitHeight = pl.displayHeight * 0.45;
+      const topMargin = pl.displayHeight * 0.2;
+      const bottomMargin = pl.displayHeight * 0.12;
+      const hitWidth = pl.displayWidth * 0.88;
+      const hitHeight = Math.max(10, pl.displayHeight - topMargin - bottomMargin);
       body.setSize(hitWidth, hitHeight);
-      body.setOffset((pl.displayWidth - hitWidth) * 0.5, pl.displayHeight - hitHeight);
+      body.setOffset((pl.displayWidth - hitWidth) * 0.5, topMargin);
       body.updateFromGameObject();
     }
     return pl;
@@ -263,46 +265,42 @@ class MainScene extends Phaser.Scene {
 
   bindHoldButton(button, key){
     button.setInteractive({ useHandCursor: false });
-    const down = (pointer)=>{
-      button.setData('pointerId', pointer.id);
+    const activate = (pointer)=>{
       button.setTint(0x66c1ff);
       this.touchButtons[key] = true;
       if(this.input?.manager?.setPollAlways) this.input.manager.setPollAlways();
-      if(pointer.event && pointer.event.cancelable) pointer.event.preventDefault();
+      if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
-    const clear = (pointer)=>{
-      if(pointer && button.getData('pointerId') !== pointer.id) return;
+    const deactivate = (pointer)=>{
       button.clearTint();
-      button.setData('pointerId', null);
       this.touchButtons[key] = false;
+      if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
-    button.on('pointerdown', down);
-    button.on('pointerup', clear);
-    button.on('pointerupoutside', clear);
-    button.on('pointerout', clear);
-    button.on('pointercancel', clear);
+    button.on('pointerdown', activate);
+    button.on('pointerup', deactivate);
+    button.on('pointerupoutside', deactivate);
+    button.on('pointerout', deactivate);
+    button.on('pointercancel', deactivate);
     return button;
   }
 
   bindTapButton(button, callback){
     button.setInteractive({ useHandCursor: false });
-    const down = (pointer)=>{
-      button.setData('pointerId', pointer.id);
+    const press = (pointer)=>{
       button.setTint(0x66c1ff);
       if(this.input?.manager?.setPollAlways) this.input.manager.setPollAlways();
       callback();
-      if(pointer.event && pointer.event.cancelable) pointer.event.preventDefault();
+      if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
-    const clear = (pointer)=>{
-      if(pointer && button.getData('pointerId') !== pointer.id) return;
+    const release = (pointer)=>{
       button.clearTint();
-      button.setData('pointerId', null);
+      if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
-    button.on('pointerdown', down);
-    button.on('pointerup', clear);
-    button.on('pointerupoutside', clear);
-    button.on('pointerout', clear);
-    button.on('pointercancel', clear);
+    button.on('pointerdown', press);
+    button.on('pointerup', release);
+    button.on('pointerupoutside', release);
+    button.on('pointerout', release);
+    button.on('pointercancel', release);
     return button;
   }
 
