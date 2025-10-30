@@ -15,9 +15,9 @@ class MainScene extends Phaser.Scene {
     }
 
     this.load.image('forest-bg', 'img/forest.png');
-    this.load.image('platforma-src', 'img/platforma.png');
 
-    // Procedural textures used by UI (platforms will use sprite image)
+    // Procedural textures (UI + платформы)
+    this.makePlatformTexture();
     this.makeArrowButton('arrow-up', 'up');
     this.makeArrowButton('arrow-down', 'down');
     this.makeArrowButton('arrow-left', 'left');
@@ -34,14 +34,11 @@ class MainScene extends Phaser.Scene {
 
     this.createParallaxBackground(W, H);
 
-    // Prepare platform textures from the provided image with two platforms
-    this.preparePlatformTextures();
-
-    // Level layout using provided platform sprites
+    // Level layout using procedural platforms
     this.platforms = this.physics.add.staticGroup();
     const groundY = 520;
-    const leftPlatform = this.addPlatform(320, groundY, 'platform-long');
-    this.addPlatform(610, groundY, 'platform-short');
+    const leftPlatform = this.addPlatform(280, groundY, 320);
+    this.addPlatform(620, groundY, 320);
 
     // Player
     const spawnX = leftPlatform.x - leftPlatform.displayWidth * 0.25;
@@ -104,51 +101,47 @@ class MainScene extends Phaser.Scene {
     this.player.play('idle');
   }
 
-  addPlatform(x, y, key='platform-long'){
-    const pl = this.platforms.create(x, y, key).setOrigin(0.5,1);
+  addPlatform(x, y, width=320){
+    const pl = this.platforms.create(x, y, 'platform').setOrigin(0.5,1);
+    const platformHeight = 72;
+    pl.setDisplaySize(width, platformHeight);
     pl.refreshBody();
     if(pl.body){
       const body = pl.body;
-      const topMargin = pl.displayHeight * 0.2;
-      const bottomMargin = pl.displayHeight * 0.12;
-      const hitWidth = pl.displayWidth * 0.88;
-      const hitHeight = Math.max(10, pl.displayHeight - topMargin - bottomMargin);
-      body.setSize(hitWidth, hitHeight);
-      body.setOffset((pl.displayWidth - hitWidth) * 0.5, topMargin);
+      const topMargin = pl.displayHeight * 0.18;
+      const hitHeight = Math.max(20, pl.displayHeight - topMargin);
+      body.setSize(pl.displayWidth, hitHeight);
+      body.setOffset(0, topMargin);
       body.updateFromGameObject();
     }
     return pl;
   }
 
-  preparePlatformTextures(){
-    const base = this.textures.get('platforma-src');
-    if(!base) return;
-    const img = base.getSourceImage();
-    if(!img || !img.width || !img.height) return;
-
-    const scale = 0.5;
-    const regions = [
-      { key: 'platform-short', x: 454, y: 211, width: 545, height: 217 },
-      { key: 'platform-long', x: 359, y: 616, width: 776, height: 190 }
-    ];
-    regions.forEach((region)=>{
-      this.createTextureFromSection(region.key, img, region, scale);
-    });
-  }
-
-  createTextureFromSection(key, img, region, scale=1){
+  makePlatformTexture(){
+    const key = 'platform';
     if(this.textures.exists(key)){
       this.textures.remove(key);
     }
-    const destW = Math.max(1, Math.round(region.width * scale));
-    const destH = Math.max(1, Math.round(region.height * scale));
-    const tex = this.textures.createCanvas(key, destW, destH);
-    const ctx = tex.context;
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, destW, destH);
-    ctx.drawImage(img, region.x, region.y, region.width, region.height, 0, 0, destW, destH);
-    tex.refresh();
-    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    const w = 320, h = 80;
+    const g = this.make.graphics({x:0,y:0, add:false});
+    // тень
+    g.fillStyle(0x141414, 0.35);
+    g.fillRoundedRect(6, 8, w-12, h-10, 16);
+    // грунт
+    g.fillStyle(0x3b2415, 1);
+    g.fillRoundedRect(0, 18, w, h-24, 18);
+    // трава
+    const grassHeight = 30;
+    g.fillStyle(0x2c6f1a, 1);
+    g.fillRoundedRect(0, 0, w, grassHeight, { tl: 16, tr: 16, bl: 8, br: 8 });
+    g.fillStyle(0x49a72b, 1);
+    const blades = 28;
+    for(let i = 0; i < blades; i++){
+      const bladeX = (i / blades) * w;
+      g.fillTriangle(bladeX, grassHeight, bladeX + 12, 8, bladeX + 24, grassHeight);
+    }
+    g.generateTexture(key, w, h);
+    g.destroy();
   }
 
   makeArrowButton(key, direction, size=128){
@@ -266,16 +259,22 @@ class MainScene extends Phaser.Scene {
   bindHoldButton(button, key){
     button.setInteractive({ useHandCursor: false });
     const activate = (pointer)=>{
+      if(button.getData('pointerId') !== null) return;
+      button.setData('pointerId', pointer.id);
       button.setTint(0x66c1ff);
       this.touchButtons[key] = true;
       if(this.input?.manager?.setPollAlways) this.input.manager.setPollAlways();
       if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
     const deactivate = (pointer)=>{
+      const trackedId = button.getData('pointerId');
+      if(trackedId === null || (pointer && pointer.id !== trackedId)) return;
+      button.setData('pointerId', null);
       button.clearTint();
       this.touchButtons[key] = false;
       if(pointer?.event && pointer.event.cancelable) pointer.event.preventDefault();
     };
+    button.setData('pointerId', null);
     button.on('pointerdown', activate);
     button.on('pointerup', deactivate);
     button.on('pointerupoutside', deactivate);
